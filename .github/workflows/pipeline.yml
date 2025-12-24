@@ -1,37 +1,47 @@
 name: IaC Pipeline (Vagrant + Ansible + Docker)
 
+# Déclenchement du workflow
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted   #  runner local
 
     steps:
+      # Checkout du repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Installer les dépendances système sur le runner
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y software-properties-common curl gnupg ansible virtualbox
-          # Add HashiCorp repo and install Vagrant
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-          sudo apt update
-          sudo apt install -y vagrant
-      - name: Verify Vagrant
-        run: vagrant --version
+          sudo apt install -y virtualbox vagrant ansible docker.io
 
-      - name: Start Vagrant VM
-        working-directory: vagrant
+      # Lancer la VM avec Vagrant
+      - name: Bring up Vagrant VM
+        working-directory: ./vagrant
         run: |
-          # Destroy any existing VM (to fix UID mismatch)
           vagrant destroy -f || true
           vagrant up
+
+      # Vérifier que la VM est accessible
+      - name: Test SSH connectivity
+        run: |
+          vagrant ssh -c "echo VM is up"
+
+      # Déployer avec Ansible
       - name: Run Ansible playbook
-        working-directory: ansible
+        working-directory: ./ansible
         run: |
           ansible-playbook -i inventory/hosts.ini playbook.yml
+
+      # Nettoyage 
+      - name: Destroy VM after deployment
+        if: ${{ always() }}
+        working-directory: ./vagrant
+        run: vagrant destroy -f
