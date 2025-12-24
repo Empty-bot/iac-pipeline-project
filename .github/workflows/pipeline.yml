@@ -1,4 +1,4 @@
-name: IaC Pipeline (Ansible + Docker)
+name: IaC Pipeline (Vagrant + Ansible + Docker)
 
 on:
   push:
@@ -10,29 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install dependencies
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y ansible docker.io
+          sudo apt install -y software-properties-common curl gnupg ansible virtualbox
+          # Add HashiCorp repo and install Vagrant
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt update
+          sudo apt install -y vagrant
+      - name: Verify Vagrant
+        run: vagrant --version
 
-      # Verify Docker and Ansible
-      - name: Verify tools
+      - name: Start Vagrant VM
+        working-directory: vagrant
         run: |
-          docker --version
-          ansible --version
-
-      # Run Ansible playbook
+          # Destroy any existing VM (to fix UID mismatch)
+          vagrant destroy -f || true
+          vagrant up
       - name: Run Ansible playbook
         working-directory: ansible
         run: |
           ansible-playbook -i inventory/hosts.ini playbook.yml
-
-      # Optional: Clean up Docker containers/images (if needed)
-      - name: Cleanup Docker
-        run: |
-          docker system prune -af || true
