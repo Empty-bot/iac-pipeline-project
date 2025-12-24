@@ -1,118 +1,107 @@
-name: IaC Pipeline (Terraform + Ansible + Docker)
+name: IaC Pipeline
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    environment: 
+      name: dev
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
 
-    env:
-      VAULT_ADDR: http://127.0.0.1:8200
-      VAULT_TOKEN: root
+    permissions:
+      id-token: write
+      contents: read
+      secrets: read
 
     steps:
-      # -------------------------
-      # 1. Checkout code
-      # -------------------------
+      # Checkout code
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      # -------------------------
-      # 2. Install dependencies (SAFE)
-      # -------------------------
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip curl python3-pip
+      # Authenticate to Vault via OIDC
+      - name: Authenticate to Vault via OIDC
+        id: vault-login
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          method: oidc
+          role: github-actions
+          token: ${{ steps.vault-login.outputs.client_token }}
 
-      # -------------------------
-      # 3. Install Terraform (CHECK BEFORE DOWNLOAD)
-      # -------------------------
-      - name: Install Terraform safely
+      # Fetch secrets from Vault
+      - name: Fetch secrets from Vault
         run: |
-          if ! command -v terraform &> /dev/null; then
-            echo "Terraform not found. Installing..."
-            TERRAFORM_VERSION=1.6.6
-            curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
-            unzip terraform.zip
-            sudo mv terraform /usr/local/bin/
-            rm terraform.zip
-          else
-            echo "Terraform already installed"
+          export DB_PASSWORD=$(vault kv get -field=password secret/${{ github.event.inputs.deploy_env }}/db)
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+
+      # Install dependencies if missing
+      - name: Install dependencies
+        run: |
+          sudo apt update
+
+          # Vagrant
+          if ! command -v vagrant &> /dev/null; then
+            echo "Installing Vagrant..."
+            sudo apt install -y vagrant
           fi
 
-      # -------------------------
-      # 4. Terraform Init & Apply
-      # -------------------------
+          # VirtualBox
+          if ! command -v VBoxManage &> /dev/null; then
+            echo "Installing VirtualBox..."
+            sudo apt install -y virtualbox
+          fi
+
+          # Ansible
+          if ! command -v ansible &> /dev/null; then
+            echo "Installing Ansible..."
+            sudo apt install -y ansible
+          fi
+
+          # Docker
+          if ! command -v docker &> /dev/null; then
+            echo "Installing Docker..."
+            sudo apt install -y docker.io
+            sudo systemctl enable --now docker
+          fi
+
+          # Containerd
+          if ! command -v containerd &> /dev/null; then
+            echo "Installing containerd..."
+            sudo apt install -y containerd
+            sudo systemctl enable --now containerd
+          fi
+
+      # Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      # Terraform Init & Apply
       - name: Terraform Init
-        working-directory: terraform
+        working-directory: ./terraform
         run: terraform init
 
       - name: Terraform Apply
-        working-directory: terraform
+        working-directory: ./terraform
         run: terraform apply -auto-approve
 
-      # -------------------------
-      # 5. Install Ansible (CHECK BEFORE INSTALL)
-      # -------------------------
-      - name: Install Ansible safely
+      # 7️Verify Docker container on VM
+      - name: Verify Docker container
         run: |
-          if ! command -v ansible &> /dev/null; then
-            echo "Installing Ansible..."
-            pip3 install ansible
-          else
-            echo "Ansible already installed"
-          fi
+          vagrant ssh vm -c "docker ps"
 
-      # -------------------------
-      # 6. Install Vault CLI (CHECK BEFORE DOWNLOAD)
-      # -------------------------
-      - name: Install Vault safely
-        run: |
-          if ! command -v vault &> /dev/null; then
-            echo "Vault not found. Installing..."
-            VAULT_VERSION=1.15.4
-            curl -fsSL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
-            unzip vault.zip
-            sudo mv vault /usr/local/bin/
-            rm vault.zip
-          else
-            echo "Vault already installed"
-          fi
-
-      # -------------------------
-      # 7. Start Vault Dev Server
-      # -------------------------
-      - name: Start Vault (dev mode)
-        run: |
-          nohup vault server -dev -dev-root-token-id=root &
-
-      - name: Wait for Vault
-        run: sleep 5
-
-      # -------------------------
-      # 8. Load secrets into Vault
-      # -------------------------
-      - name: Load secrets into Vault
-        run: |
-          vault kv put secret/dev/db username=root password=root
-
-      # -------------------------
-      # 9. Run Ansible Playbook
-      # -------------------------
-      - name: Run Ansible
-        working-directory: ansible
-        run: |
-          ansible-playbook -i inventory/hosts.ini playbook.yml
-
-      # -------------------------
-      # 10. Cleanup (DESTROY)
-      # -------------------------
-      - name: Terraform Destroy
-        if: always()
-        working-directory: terraform
+      # Terraform Destroy (always)
+      - name: Destroy VM
+        if: ${{ always() }}
+        working-directory: ./terraform
         run: terraform destroy -auto-approve
