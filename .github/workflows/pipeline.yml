@@ -11,7 +11,7 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
-    environment: 
+    environment:
       name: dev
     concurrency:
       group: deploy-${{ github.ref }}
@@ -20,7 +20,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      secrets: read
 
     steps:
       # Checkout code
