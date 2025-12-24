@@ -1,76 +1,118 @@
-name: IaC Pipeline
+name: IaC Pipeline (Terraform + Ansible + Docker)
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: self-hosted  # ou ubuntu-latest si tu veux un runner GitHub
+    runs-on: ubuntu-latest
+
+    env:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_TOKEN: root
 
     steps:
+      # -------------------------
+      # 1. Checkout code
+      # -------------------------
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Ensure dependencies are installed
+      # -------------------------
+      # 2. Install dependencies (SAFE)
+      # -------------------------
+      - name: Install system dependencies
         run: |
-          # --- VAGRANT ---
-          if ! command -v vagrant &> /dev/null; then
-            echo "Installing Vagrant..."
-            sudo apt update
-            sudo apt install -y vagrant
+          sudo apt-get update
+          sudo apt-get install -y unzip curl python3-pip
+
+      # -------------------------
+      # 3. Install Terraform (CHECK BEFORE DOWNLOAD)
+      # -------------------------
+      - name: Install Terraform safely
+        run: |
+          if ! command -v terraform &> /dev/null; then
+            echo "Terraform not found. Installing..."
+            TERRAFORM_VERSION=1.6.6
+            curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+            unzip terraform.zip
+            sudo mv terraform /usr/local/bin/
+            rm terraform.zip
           else
-            echo "Vagrant already installed"
+            echo "Terraform already installed"
           fi
 
-          # --- VIRTUALBOX ---
-          if ! command -v VBoxManage &> /dev/null; then
-            echo "Installing VirtualBox..."
-            sudo apt update
-            sudo apt install -y virtualbox
-          else
-            echo "VirtualBox already installed"
-          fi
+      # -------------------------
+      # 4. Terraform Init & Apply
+      # -------------------------
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
 
-          # --- ANSIBLE ---
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      # -------------------------
+      # 5. Install Ansible (CHECK BEFORE INSTALL)
+      # -------------------------
+      - name: Install Ansible safely
+        run: |
           if ! command -v ansible &> /dev/null; then
             echo "Installing Ansible..."
-            sudo apt update
-            sudo apt install -y ansible
+            pip3 install ansible
           else
             echo "Ansible already installed"
           fi
 
-          # --- DOCKER ---
-          if ! command -v docker &> /dev/null; then
-            echo "Installing Docker..."
-            sudo apt update
-            sudo apt install -y docker.io
-            sudo systemctl enable --now docker
+      # -------------------------
+      # 6. Install Vault CLI (CHECK BEFORE DOWNLOAD)
+      # -------------------------
+      - name: Install Vault safely
+        run: |
+          if ! command -v vault &> /dev/null; then
+            echo "Vault not found. Installing..."
+            VAULT_VERSION=1.15.4
+            curl -fsSL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
+            unzip vault.zip
+            sudo mv vault /usr/local/bin/
+            rm vault.zip
           else
-            echo "Docker already installed"
+            echo "Vault already installed"
           fi
 
-          # --- CONTAINERD ---
-          if ! command -v containerd &> /dev/null; then
-            echo "Installing containerd..."
-            sudo apt update
-            sudo apt install -y containerd
-            sudo systemctl enable --now containerd
-          else
-            echo "containerd already installed"
-          fi
+      # -------------------------
+      # 7. Start Vault Dev Server
+      # -------------------------
+      - name: Start Vault (dev mode)
+        run: |
+          nohup vault server -dev -dev-root-token-id=root &
 
-      - name: Start Vagrant VM
-        working-directory: ./vagrant
-        run: vagrant up
+      - name: Wait for Vault
+        run: sleep 5
 
-      - name: Run Ansible playbook
-        working-directory: ./ansible
-        run: ansible-playbook -i inventory/hosts.ini playbook.yml
+      # -------------------------
+      # 8. Load secrets into Vault
+      # -------------------------
+      - name: Load secrets into Vault
+        run: |
+          vault kv put secret/dev/db username=root password=root
 
-      - name: Destroy Vagrant VM
-        if: ${{ always() }}
-        working-directory: ./vagrant
-        run: vagrant destroy -f
+      # -------------------------
+      # 9. Run Ansible Playbook
+      # -------------------------
+      - name: Run Ansible
+        working-directory: ansible
+        run: |
+          ansible-playbook -i inventory/hosts.ini playbook.yml
+
+      # -------------------------
+      # 10. Cleanup (DESTROY)
+      # -------------------------
+      - name: Terraform Destroy
+        if: always()
+        working-directory: terraform
+        run: terraform destroy -auto-approve

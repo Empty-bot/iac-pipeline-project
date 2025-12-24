@@ -1,10 +1,20 @@
-- name: Copy app files
-  copy:
-    src: "{{ playbook_dir }}/../app/"
-    dest: /opt/app
+- name: Fetch DB credentials from Vault
+  set_fact:
+    db_creds: >-
+      {{ lookup(
+        'hashi_vault',
+        'secret=secret/data/dev/db token=root url=http://127.0.0.1:8200'
+      ) }}
+
+- name: Generate .env file from template
+  template:
+    src: config.env.j2
+    dest: /opt/app/.env
     owner: root
     group: root
-    mode: '0755'
+    mode: '0644'
+  vars:
+    db_creds: "{{ db_creds }}"
 
 - name: Remove existing container if present
   docker_container:
