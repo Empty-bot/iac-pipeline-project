@@ -24,9 +24,14 @@ jobs:
           sudo apt update
           sudo apt install -y vagrant
 
+      - name: Verify Vagrant
+        run: vagrant --version
+
       - name: Start Vagrant VM
         working-directory: vagrant
         run: |
+          # Destroy any existing VM (to fix UID mismatch)
+          vagrant destroy -f || true
           vagrant up
 
       - name: Run Ansible playbook
