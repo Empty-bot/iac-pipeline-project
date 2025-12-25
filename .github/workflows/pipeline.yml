@@ -1,21 +1,20 @@
+---
 name: IaC Pipeline
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       deploy_env:
-        description: 'Environment to deployyyy'
+        description: "Environment to deploy"
         required: true
-        default: 'dev'
+        default: "dev"
 
 jobs:
   deploy:
     runs-on: self-hosted
+
     environment:
       name: dev
-    concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: true
 
     permissions:
       id-token: write
@@ -25,79 +24,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Authenticate to Vault via OIDC
-       - name: Authenticate to Vault via OIDC
-         uses: hashicorp/vault-action@v2
-         with:
-           url: ${{ secrets.VAULT_ADDR }}
-           method: oidc
-           role: github-actions
+      - name: Authenticate to Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          method: oidc
+          role: github-actions
 
-      # Fetch secrets from Vault
       - name: Fetch secrets from Vault
         run: |
-          export DB_PASSWORD=$(vault kv get -field=password secret/${{ github.event.inputs.deploy_env }}/db)
-          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          DB_PASSWORD=$(
+            vault kv get \
+              -field=password \
+              secret/${{ github.event.inputs.deploy_env }}/db
+          )
+          echo "DB_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
 
-      # Install dependencies if missing
       - name: Install dependencies
         run: |
           sudo apt update
+          sudo apt install -y \
+            terraform \
+            vagrant \
+            ansible \
+            docker.io \
+            virtualbox
+          sudo systemctl enable --now docker
 
-          # Vagrant
-          if ! command -v vagrant &> /dev/null; then
-            echo "Installing Vagrant..."
-            sudo apt install -y vagrant
-          fi
-
-          # VirtualBox
-          if ! command -v VBoxManage &> /dev/null; then
-            echo "Installing VirtualBox..."
-            sudo apt install -y virtualbox
-          fi
-
-          # Ansible
-          if ! command -v ansible &> /dev/null; then
-            echo "Installing Ansible..."
-            sudo apt install -y ansible
-          fi
-
-          # Docker
-          if ! command -v docker &> /dev/null; then
-            echo "Installing Docker..."
-            sudo apt install -y docker.io
-            sudo systemctl enable --now docker
-          fi
-
-          # Containerd
-          if ! command -v containerd &> /dev/null; then
-            echo "Installing containerd..."
-            sudo apt install -y containerd
-            sudo systemctl enable --now containerd
-          fi
-
-      # Setup Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-
-      # Terraform Init & Apply
       - name: Terraform Init
-        working-directory: ./terraform
+        working-directory: terraform
         run: terraform init
 
       - name: Terraform Apply
-        working-directory: ./terraform
+        working-directory: terraform
         run: terraform apply -auto-approve
 
-      # 7️Verify Docker container on VM
       - name: Verify Docker container
         run: |
           vagrant ssh vm -c "docker ps"
 
-      # Terraform Destroy (always)
-      - name: Destroy VM
-        if: ${{ always() }}
-        working-directory: ./terraform
+      - name: Terraform Destroy
+        if: "always()"
+        working-directory: terraform
         run: terraform destroy -auto-approve
