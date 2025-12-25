@@ -22,7 +22,6 @@ jobs:
       contents: read
 
     steps:
-      # Checkout code
       - name: Checkout repository
         uses: actions/checkout@v3
 
