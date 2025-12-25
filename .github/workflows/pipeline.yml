@@ -1,4 +1,4 @@
-name: IaC Pipeline (Terraform + Ansible + Docker)
+name: IaC Pipeline
 
 on:
   workflow_dispatch:
@@ -12,27 +12,26 @@ jobs:
   deploy:
     runs-on: self-hosted
 
-    # Protected environment (manual approval)
     environment:
-      name: dev
+      name: dev   # Protected environment (approval gate)
 
     concurrency:
       group: deploy-${{ github.ref }}
       cancel-in-progress: true
 
     permissions:
-      id-token: write    # Required for OIDC (Vault-ready)
+      id-token: write   # For OIDC
       contents: read
 
     steps:
       # -------------------------
-      # 1. Checkout
+      # Checkout
       # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v3
 
       # -------------------------
-      # 2. Install dependencies safely
+      # Install dependencies safely
       # -------------------------
       - name: Install dependencies if missing
         run: |
@@ -41,8 +40,7 @@ jobs:
           # Terraform
           if ! command -v terraform >/dev/null; then
             sudo apt install -y gnupg software-properties-common curl
-            curl -fsSL https://apt.releases.hashicorp.com/gpg \
-              | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp.gpg
+            curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp.gpg
             echo "deb [signed-by=/usr/share/keyrings/hashicorp.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
               | sudo tee /etc/apt/sources.list.d/hashicorp.list
             sudo apt update && sudo apt install -y terraform
@@ -51,6 +49,11 @@ jobs:
           # Vagrant
           if ! command -v vagrant >/dev/null; then
             sudo apt install -y vagrant
+          fi
+
+          # VirtualBox
+          if ! command -v VBoxManage >/dev/null; then
+            sudo apt install -y virtualbox
           fi
 
           # Ansible
@@ -64,8 +67,14 @@ jobs:
             sudo systemctl enable --now docker
           fi
 
+          # Containerd
+          if ! command -v containerd >/dev/null; then
+            sudo apt install -y containerd
+            sudo systemctl enable --now containerd
+          fi
+
       # -------------------------
-      # 3. Terraform: Provision VM
+      # Terraform
       # -------------------------
       - name: Terraform Init
         working-directory: terraform
@@ -76,17 +85,38 @@ jobs:
         run: terraform apply -auto-approve
 
       # -------------------------
-      # 4. Verify Docker container on VM
+      # Vagrant Up (create VM)
       # -------------------------
-      - name: Verify Docker container
-        working-directory: vagrant
+      - name: Vagrant Up
         run: |
-          vagrant status
+          cd vagrant  # adjust if your Vagrantfile is somewhere else
+          vagrant up --provider=virtualbox
+
+      # -------------------------
+      # Run Ansible (inside VM)
+      # -------------------------
+      - name: Run Ansible Playbook
+        run: |
+          cd ansible
+          ansible-playbook -i inventory/hosts.ini playbook.yml
+
+      # -------------------------
+      # Verify Docker container
+      # -------------------------
+      - name: Verify Docker container in VM
+        run: |
+          cd vagrant
           vagrant ssh vm -c "docker ps"
 
       # -------------------------
-      # 5. Cleanup (always)
+      # Cleanup
       # -------------------------
+      - name: Vagrant Destroy
+        if: always()
+        run: |
+          cd vagrant
+          vagrant destroy -f
+
       - name: Terraform Destroy
         if: always()
         working-directory: terraform
