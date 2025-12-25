@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_env:
-        description: 'Environment to deploy'
+        description: 'Environment to deployyyy'
         required: true
         default: 'dev'
 
