@@ -1,4 +1,4 @@
-name: IaC Pipeline (Terraform + Ansible + Docker)
+]name: IaC Pipeline (Terraform + Ansible + Docker)
 
 on:
   workflow_dispatch:
@@ -73,8 +73,10 @@ jobs:
       # -------------------------
       # 4. Validation
       # -------------------------
-      - name: Verify Docker container inside VM
+      - name: Verify Docker container in VM
+        working-directory: vagrant
         run: |
+          vagrant status
           vagrant ssh vm -c "docker ps"
 
       # -------------------------
