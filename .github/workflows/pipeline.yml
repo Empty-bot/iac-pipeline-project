@@ -1,4 +1,4 @@
-name: IaC Pipeline
+name: IaC Pipeline (Terraform + Ansible + Docker)
 
 on:
   workflow_dispatch:
@@ -12,28 +12,29 @@ jobs:
   deploy:
     runs-on: self-hosted
 
+    # Protected environment (manual approval gate)
     environment:
-      name: dev   # protected environment (approval gate)
+      name: dev
 
     concurrency:
       group: deploy-${{ github.ref }}
       cancel-in-progress: true
 
     permissions:
-      id-token: write   # OIDC
+      id-token: write    # Required for OIDC (Vault-ready)
       contents: read
 
     steps:
       # -------------------------
-      # Checkout
+      # 1. Checkout
       # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v3
 
       # -------------------------
-      # Install dependencies (safe checks)
+      # 2. Install dependencies (safe checks)
       # -------------------------
-      - name: Install dependencies if missing
+      - name: Install required tools
         run: |
           sudo apt update
 
@@ -59,7 +60,7 @@ jobs:
           fi
 
       # -------------------------
-      # Terraform
+      # 3. Terraform: Provision VM
       # -------------------------
       - name: Terraform Init
         working-directory: terraform
@@ -70,14 +71,14 @@ jobs:
         run: terraform apply -auto-approve
 
       # -------------------------
-      # Verification
+      # 4. Validation
       # -------------------------
-      - name: Verify Docker container in VM
+      - name: Verify Docker container inside VM
         run: |
           vagrant ssh vm -c "docker ps"
 
       # -------------------------
-      # Cleanup
+      # 5. Cleanup (always)
       # -------------------------
       - name: Terraform Destroy
         if: always()
