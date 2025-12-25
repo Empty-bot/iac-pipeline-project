@@ -27,14 +27,12 @@ jobs:
         uses: actions/checkout@v3
 
       # Authenticate to Vault via OIDC
-      - name: Authenticate to Vault via OIDC
-        id: vault-login
-        uses: hashicorp/vault-action@v2
-        with:
-          url: ${{ secrets.VAULT_ADDR }}
-          method: oidc
-          role: github-actions
-          token: ${{ steps.vault-login.outputs.client_token }}
+       - name: Authenticate to Vault via OIDC
+         uses: hashicorp/vault-action@v2
+         with:
+           url: ${{ secrets.VAULT_ADDR }}
+           method: oidc
+           role: github-actions
 
       # Fetch secrets from Vault
       - name: Fetch secrets from Vault
