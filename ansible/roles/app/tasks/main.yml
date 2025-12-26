@@ -5,6 +5,13 @@
         'hashi_vault',
         'secret=secret/data/dev/db token=root url=http://127.0.0.1:8200'
       ) }}
+- name: Ensure /opt/app directory exists
+  file:
+    path: /opt/app
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Generate .env file from template
   template:
