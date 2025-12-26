@@ -1,27 +1,18 @@
-- name: Fetch DB credentials from Vault
-  set_fact:
-    db_creds: >-
-      {{ lookup(
-        'hashi_vault',
-        'secret=secret/data/dev/db token=root url=http://127.0.0.1:8200'
-      ) }}
-- name: Ensure /opt/app directory exists
-  file:
-    path: /opt/app
-    state: directory
+- name: Copy app files
+  copy:
+    src: "{{ playbook_dir }}/../app/"
+    dest: /opt/app
     owner: root
     group: root
     mode: '0755'
 
-- name: Generate .env file from template
-  template:
-    src: config.env.j2
-    dest: /opt/app/.env
+- name: Copy Dockerfile to /opt/app
+  copy:
+    src: "{{ playbook_dir }}/../../Dockerfile"  # chemin vers ton Dockerfile local
+    dest: /opt/app/Dockerfile
     owner: root
     group: root
     mode: '0644'
-  vars:
-    db_creds: "{{ db_creds }}"
 
 - name: Remove existing container if present
   docker_container:
@@ -41,6 +32,7 @@
     source: build
     build:
       path: /opt/app
+      # dockerfile: Dockerfile   # décommente et modifie si le Dockerfile a un autre nom
 
 - name: Run Docker container
   docker_container:
