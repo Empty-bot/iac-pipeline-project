@@ -99,17 +99,23 @@ jobs:
         run: |
           cd vagrant
           vagrant ssh-config > ssh-config
+
           cd ../ansible
           echo "[servers]" > inventory/hosts.ini
-          awk '/HostName/ {host=$2} /Port/ {port=$2} /User / {user=$2} END {print "vm ansible_host="host" ansible_port="port" ansible_user="user" ansible_ssh_private_key_file=\"/home/runner/.vagrant.d/insecure_private_key\" ansible_ssh_common_args=\"-o StrictHostKeyChecking=no\""}' ../vagrant/ssh-config >> inventory/hosts.ini
+          echo "default" >> inventory/hosts.ini
 
       # -------------------------
       # Run Ansible Playbook
       # -------------------------
       - name: Run Ansible Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
           cd ansible
-          ansible-playbook -i inventory/hosts.ini playbook.yml
+          ansible-playbook \
+             -i inventory/hosts.ini \
+             --ssh-common-args='-F ../vagrant/ssh-config' \
+             playbook.yml
 
       # -------------------------
       # Verify Docker container
