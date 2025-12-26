@@ -1,12 +1,14 @@
 resource "null_resource" "vagrant_vm" {
-  # Trigger rebuild si Vagrantfile change
   triggers = {
     vagrantfile_hash = filesha256("../vagrant/Vagrantfile")
   }
 
-  # Provision VM
+  # Provision VM with Ansible
   provisioner "local-exec" {
-    command = "cd ../vagrant && vagrant up"
+    command = <<EOT
+cd ../vagrant && vagrant up
+ansible-playbook -i ../ansible/inventory/hosts.ini ../ansible/playbook.yml --limit vm
+EOT
   }
 
   # Cleanup VM
