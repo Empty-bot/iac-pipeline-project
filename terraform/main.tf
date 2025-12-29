@@ -14,7 +14,7 @@ provider "aws" {
 # Variables
 variable "aws_region" {
   description = "AWS region"
-  default     = "eu-east-1"
+  default     = "eu-west-3"
 }
 
 # Récupérer la dernière AMI Ubuntu 22.04
