@@ -155,9 +155,22 @@ jobs:
       - name: Test application
         run: |
           echo "Testing app at http://${{ steps.terraform.outputs.instance_ip }}:5000"
-          sleep 10
-          curl -f http://${{ steps.terraform.outputs.instance_ip }}:5000 || exit 1
-          echo "VVV Application is running!"
+          echo "Waiting for Docker container to start..."
+          sleep 30  # ← 30 secondes pour être sûr
+
+          # Essayer plusieurs fois
+          for i in {1..5}; do
+            echo "Attempt $i/5..."
+            if curl -f http://${{ steps.terraform.outputs.instance_ip }}:5000; then
+              echo "VVV Application is running!"
+              exit 0
+            fi
+            echo "Not ready yet, waiting 10s..."
+            sleep 10
+          done
+
+          echo "XXX Application failed to start"
+          exit 1
 
       # -------------------------
       # Cleanup
