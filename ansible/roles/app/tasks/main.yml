@@ -4,13 +4,13 @@
     dest: /opt/app
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
 
 - name: Copy Dockerfile to /opt/app
   copy:
-    src: "{{ playbook_dir }}/../app/Dockerfile"  # chemin vers ton Dockerfile local
+    src: "{{ playbook_dir }}/../app/Dockerfile" # chemin vers ton Dockerfile local
     dest: /opt/app/Dockerfile
-    mode: '0644'
+    mode: "0644"
 
 - name: Remove existing container if present
   docker_container:
@@ -39,7 +39,7 @@
     state: started
     restart_policy: always
     ports:
-      - "5001:5000"
+      - "5000:5000"
 
 - name: Remove dangling Docker images
   docker_prune:
@@ -48,10 +48,10 @@
   copy:
     src: "{{ playbook_dir }}/../app/requirements.txt"
     dest: /opt/app/requirements.txt
-    mode: '0644'
+    mode: "0644"
 
 - name: Copy app.py
   copy:
     src: "{{ playbook_dir }}/../app/app.py"
     dest: /opt/app/app.py
-    mode: '0644'
+    mode: "0644"
