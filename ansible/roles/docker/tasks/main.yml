@@ -26,9 +26,9 @@
     enabled: true
   become: yes
 
-- name: Add vagrant user to docker group
+- name: Add ubuntu user to docker group
   user:
-    name: vagrant
+    name: ubuntu
     groups: docker
     append: yes
 
@@ -39,3 +39,6 @@
   become: yes
   environment:
     DEBIAN_FRONTEND: noninteractive
+
+- name: Reset SSH connection to apply group changes
+  meta: reset_connection
