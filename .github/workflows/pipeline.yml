@@ -77,6 +77,14 @@ jobs:
           echo "APP_SECRET=$APP_SECRET" >> $GITHUB_ENV
 
       # -------------------------
+      # Setup Terraform
+      # -------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      # -------------------------
       # Terraform
       # -------------------------
       - name: Terraform Init
