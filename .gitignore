@@ -2,3 +2,12 @@
 vagrant/.vagrant/
 actions-runner/
 actions-runner/_work/
+
+
+# Terraform
+terraform/*.pem
+terraform/ec2-key.pem
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
