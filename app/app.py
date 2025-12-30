@@ -82,6 +82,7 @@ HTML_TEMPLATE = """
     <div class="secret-box">
         <div class="secret-label">🔐 Secret from Vault:</div>
         <div class="secret-value">{{ secret }}</div>
+        <p> Ce secret est affiché uniquement à des fins de démonstration. À ne surtout pas reproduire en production </>
     </div>
     
     <button onclick="alert('Yay! You clicked me!')">Click me!</button>
