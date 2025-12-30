@@ -1,6 +1,10 @@
+import os
 from flask import Flask, render_template_string
 
 app = Flask(__name__)
+
+# Récupérer le secret depuis la variable d'environnement
+APP_SECRET = os.environ.get('APP_SECRET', 'NO_SECRET_PROVIDED')
 
 # HTML template with simple cute styling
 HTML_TEMPLATE = """
@@ -49,11 +53,37 @@ HTML_TEMPLATE = """
         button:hover {
             background-color: #ff3399;
         }
+        .secret-box {
+            background: white;
+            border: 2px dashed #ff66b2;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 30px auto;
+            max-width: 500px;
+        }
+        .secret-label {
+            color: #ff66b2;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .secret-value {
+            color: #333;
+            font-family: monospace;
+            font-size: 1em;
+            margin-top: 10px;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
     <h1>Hello! <span class="heart">❤️</span></h1>
     <p>Welcome to my cute Flask app!</p>
+    
+    <div class="secret-box">
+        <div class="secret-label">🔐 Secret from Vault:</div>
+        <div class="secret-value">{{ secret }}</div>
+    </div>
+    
     <button onclick="alert('Yay! You clicked me!')">Click me!</button>
 </body>
 </html>
@@ -61,7 +91,11 @@ HTML_TEMPLATE = """
 
 @app.route("/")
 def hello():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML_TEMPLATE, secret=APP_SECRET)
+
+@app.route("/health")
+def health():
+    return {"status": "healthy", "secret_loaded": APP_SECRET != 'NO_SECRET_PROVIDED'}
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

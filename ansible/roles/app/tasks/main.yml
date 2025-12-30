@@ -40,6 +40,8 @@
     restart_policy: always
     ports:
       - "5000:5000"
+    env:
+      APP_SECRET: "{{ app_secret }}"
 
 - name: Remove dangling Docker images
   docker_prune:
