@@ -1,4 +1,4 @@
-name: IaC Pipeline
+name: IaC Pipeline AWS
 
 on:
   workflow_dispatch:
@@ -9,34 +9,27 @@ on:
         default: "production"
 
 jobs:
-  deploy:
+  # ==========================================
+  # JOB 1 : PROVISION INFRASTRUCTURE
+  # ==========================================
+  provision:
     runs-on: ubuntu-latest
 
     environment:
-      name: production #approval gate
+      name: production
 
-    concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: true
-
-    permissions:
-      id-token: write #  required for OIDC
-      contents: read
+    outputs:
+      instance_ip: ${{ steps.terraform.outputs.instance_ip }}
+      ssh_key_path: ${{ steps.terraform.outputs.ssh_key_path }}
 
     env:
-      VAULT_ADDR: ${{ vars.VAULT_ADDR }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
+      VAULT_ADDR: ${{ vars.VAULT_ADDR }}
 
     steps:
-      # -------------------------
-      # Checkout
-      # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # -------------------------
-      # Configure AWS Credentials
-      # -------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -44,9 +37,79 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # -------------------------
-      # Authenticate to Vault using GitHub OIDC
-      # -------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      - name: Get Terraform outputs
+        id: terraform
+        working-directory: terraform
+        run: |
+          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
+          echo "ssh_key_path=$(terraform output -raw ssh_private_key_path)" >> $GITHUB_OUTPUT
+
+      - name: Wait for EC2 to be ready
+        run: |
+          echo "Waiting for SSH on ${{ steps.terraform.outputs.instance_ip }}..."
+          for i in {1..30}; do
+            if nc -z ${{ steps.terraform.outputs.instance_ip }} 22 2>/dev/null; then
+              echo "SSH is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "SSH not ready after 5 minutes"
+          exit 1
+
+      # Sauvegarder la clé SSH et le state Terraform pour les jobs suivants
+      - name: Upload SSH key
+        uses: actions/upload-artifact@v3
+        with:
+          name: ssh-key
+          path: terraform/ec2-key.pem
+          retention-days: 1
+
+      - name: Upload Terraform state
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-state
+          path: terraform/terraform.tfstate
+          retention-days: 1
+
+  # ==========================================
+  # JOB 2 : CONFIGURE & DEPLOY
+  # ==========================================
+  configure:
+    runs-on: ubuntu-latest
+    needs: provision
+
+    env:
+      VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download SSH key
+        uses: actions/download-artifact@v3
+        with:
+          name: ssh-key
+          path: terraform/
+
+      - name: Set SSH key permissions
+        run: chmod 600 terraform/ec2-key.pem
+
       - name: Login to Vault with OIDC
         run: |
           sudo apt install -y jq curl
@@ -64,9 +127,6 @@ jobs:
 
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
 
-      # -------------------------
-      # Read secrets from Vault
-      # -------------------------
       - name: Read secrets from Vault
         run: |
           APP_SECRET=$(curl -s \
@@ -76,69 +136,21 @@ jobs:
 
           echo "APP_SECRET=$APP_SECRET" >> $GITHUB_ENV
 
-      # -------------------------
-      # Setup Terraform
-      # -------------------------
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.0
-
-      # -------------------------
-      # Terraform
-      # -------------------------
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: terraform
-        run: terraform apply -auto-approve
-
-      # -------------------------
-      # Get Terraform outputs
-      # -------------------------
-      - name: Get Terraform outputs
-        id: terraform
-        working-directory: terraform
-        run: |
-          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
-          echo "ssh_key_path=$(terraform output -raw ssh_private_key_path)" >> $GITHUB_OUTPUT
-
-      # -------------------------
-      # Wait for SSH to be ready
-      # -------------------------
-      - name: Wait for EC2 to be ready
-        run: |
-          echo "Waiting for SSH on ${{ steps.terraform.outputs.instance_ip }}..."
-          for i in {1..30}; do
-            if nc -z ${{ steps.terraform.outputs.instance_ip }} 22 2>/dev/null; then
-              echo "SSH is ready!"
-              exit 0
-            fi
-            echo "Attempt $i/30: Not ready yet, waiting 10s..."
-            sleep 10
-          done
-          echo "SSH not ready after 5 minutes"
-          exit 1
-
-      # -------------------------
-      # Generate Ansible inventory for EC2
-      # -------------------------
       - name: Generate Ansible inventory
         run: |
           mkdir -p ansible/inventory
           cat > ansible/inventory/hosts.ini <<EOF
           [servers]
-          ec2 ansible_host=${{ steps.terraform.outputs.instance_ip }} ansible_user=ubuntu ansible_ssh_private_key_file=../terraform/ec2-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          ec2 ansible_host=${{ needs.provision.outputs.instance_ip }} ansible_user=ubuntu ansible_ssh_private_key_file=../terraform/ec2-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
           EOF
 
-          echo "Generated inventory:"
           cat ansible/inventory/hosts.ini
 
-      # -------------------------
-      # Run Ansible (with Vault secret)
-      # -------------------------
+      - name: Install Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y ansible
+
       - name: Run Ansible Playbook
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
@@ -149,19 +161,15 @@ jobs:
             --extra-vars "app_secret=${APP_SECRET}" \
             playbook.yml
 
-      # -------------------------
-      # Test application
-      # -------------------------
       - name: Test application
         run: |
-          echo "Testing app at http://${{ steps.terraform.outputs.instance_ip }}:5000"
+          echo "Testing app at http://${{ needs.provision.outputs.instance_ip }}:5000"
           echo "Waiting for Docker container to start..."
-          sleep 30  # ← 30 secondes pour être sûr
+          sleep 30
 
-          # Essayer plusieurs fois
           for i in {1..5}; do
             echo "Attempt $i/5..."
-            if curl -f http://${{ steps.terraform.outputs.instance_ip }}:5000; then
+            if curl -f http://${{ needs.provision.outputs.instance_ip }}:5000; then
               echo "VVV Application is running!"
               exit 0
             fi
@@ -172,10 +180,49 @@ jobs:
           echo "XXX Application failed to start"
           exit 1
 
-      # -------------------------
-      # Cleanup
-      # -------------------------
-      - name: Destroy infrastructure
-        if: always()
+      - name: Display application URL
+        run: |
+          echo "!!! Application deployed successfully!"
+          echo "Access it at: http://${{ needs.provision.outputs.instance_ip }}:5000"
+
+  # ==========================================
+  # JOB 3 : CLEANUP
+  # ==========================================
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [provision, configure]
+    if: always()
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download Terraform state
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-state
+          path: terraform/
+        continue-on-error: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Destroy
         working-directory: terraform
         run: terraform destroy -auto-approve
