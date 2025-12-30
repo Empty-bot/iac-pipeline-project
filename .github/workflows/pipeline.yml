@@ -37,9 +37,12 @@ jobs:
       # Authenticate to Vault using GitHub OIDC
       # -------------------------
       - name: Login to Vault with OIDC
-        id: vault_auth
         run: |
           sudo apt install -y jq curl
+
+          echo "🔍 Debug: VAULT_ADDR = $VAULT_ADDR"
+          echo "🔍 Debug: Repository = ${{ github.repository }}"
+          echo "🔍 Debug: Repository owner = ${{ github.repository_owner }}"
 
           # Récupérer le JWT token de GitHub
           JWT=$(curl -s \
@@ -47,21 +50,27 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/${{ github.repository_owner }}" \
             | jq -r '.value')
 
-          echo "JWT token obtained"
+          echo "🔍 Debug: JWT obtained (length: ${#JWT})"
 
           # S'authentifier à Vault avec le JWT
-          VAULT_TOKEN=$(curl -s \
+          echo "🔍 Attempting to authenticate to Vault..."
+          VAULT_RESPONSE=$(curl -s \
             --request POST \
             --data "{\"jwt\":\"$JWT\",\"role\":\"github-actions\"}" \
-            $VAULT_ADDR/v1/auth/jwt/login \
-            | jq -r '.auth.client_token')
+            $VAULT_ADDR/v1/auth/jwt/login)
+
+          echo "🔍 Vault response:"
+          echo "$VAULT_RESPONSE" | jq '.'
+
+          VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r '.auth.client_token')
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
-            echo "XXX Failed to authenticate to Vault"
+            echo "❌ Failed to authenticate to Vault"
+            echo "Full response: $VAULT_RESPONSE"
             exit 1
           fi
 
-          echo "VVV Vault authentication successful"
+          echo "✅ Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
 
       # -------------------------
