@@ -74,14 +74,14 @@ jobs:
 
       # Sauvegarder la clé SSH et le state Terraform pour les jobs suivants
       - name: Upload SSH key
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ssh-key
           path: terraform/ec2-key.pem
           retention-days: 1
 
       - name: Upload Terraform state
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terraform-state
           path: terraform/terraform.tfstate
@@ -102,7 +102,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download SSH key
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ssh-key
           path: terraform/
@@ -208,7 +208,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Download Terraform state
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-state
           path: terraform/
