@@ -80,7 +80,7 @@ jobs:
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
             -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
-            $VAULT_ADDR/v1/secret/data/iac/aws)
+            $VAULT_ADDR/v1/admin/secret/data/secret/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
           AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | jq -r '.data.data.secret_access_key')
@@ -223,7 +223,7 @@ jobs:
           APP_SECRET=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
             -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
-            $VAULT_ADDR/v1/secret/data/iac/app \
+            $VAULT_ADDR/v1/admin/secret/data/secret/iac/app \
             | jq -r '.data.data.app_secret')
 
           if [ -z "$APP_SECRET" ] || [ "$APP_SECRET" = "null" ]; then
@@ -344,7 +344,7 @@ jobs:
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
             -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
-            $VAULT_ADDR/v1/secret/data/iac/aws)
+            $VAULT_ADDR/v1/admin/secret/data/secret/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
           AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | jq -r '.data.data.secret_access_key')
