@@ -70,6 +70,13 @@ jobs:
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
           echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
+      - name: Debug Vault identity
+        run: |
+          curl -s \
+            -H "X-Vault-Token: $VAULT_TOKEN" \
+            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
+            $VAULT_ADDR/v1/auth/token/lookup-self | jq
+
       # -------------------------
       # Read AWS secrets from Vault
       # -------------------------
@@ -212,13 +219,6 @@ jobs:
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
           echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
-
-      - name: Debug Vault identity
-        run: |
-          curl -s \
-            -H "X-Vault-Token: $VAULT_TOKEN" \
-            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
-            $VAULT_ADDR/v1/auth/token/lookup-self | jq
 
       # -------------------------
       # Read APP_SECRET from Vault
