@@ -40,18 +40,13 @@ jobs:
         run: |
           sudo apt install -y jq curl
 
-          echo "🔍 VAULT_ADDR = $VAULT_ADDR"
-          echo "🔍 Repository = ${{ github.repository }}"
-
           # Récupérer le JWT token de GitHub
           JWT=$(curl -s \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/${{ github.repository_owner }}" \
             | jq -r '.value')
 
-          echo "JWT token obtained (length: ${#JWT})"
-
-          # S'authentifier à Vault avec le JWT (namespace admin pour HCP Vault)
+          # S'authentifier à Vault avec le JWT (avec namespace admin)
           VAULT_RESPONSE=$(curl -s \
             --request POST \
             --header "X-Vault-Namespace: admin" \
@@ -62,31 +57,19 @@ jobs:
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
             echo "XXX Failed to authenticate to Vault"
-            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
-          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
-
-      - name: Debug Vault identity
-        run: |
-          curl -s \
-            -H "X-Vault-Token: $VAULT_TOKEN" \
-            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
-            $VAULT_ADDR/v1/auth/token/lookup-self | jq
 
       # -------------------------
       # Read AWS secrets from Vault
       # -------------------------
       - name: Read AWS credentials from Vault
         run: |
-          echo "Reading AWS credentials from Vault..."
-
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
-            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/admin/secret/data/secret/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
@@ -95,7 +78,6 @@ jobs:
 
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
             echo "XXX Failed to read AWS credentials from Vault"
-            echo "Response: $(echo $AWS_CREDS | jq '.')"
             exit 1
           fi
 
@@ -212,24 +194,19 @@ jobs:
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
             echo "XXX Failed to authenticate to Vault"
-            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
-          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
       # -------------------------
       # Read APP_SECRET from Vault
       # -------------------------
       - name: Read APP_SECRET from Vault
         run: |
-          echo "Reading APP_SECRET from Vault..."
-
           APP_SECRET=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
-            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/admin/secret/data/secret/iac/app \
             | jq -r '.data.data.app_secret')
 
@@ -333,24 +310,19 @@ jobs:
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
             echo "XXX Failed to authenticate to Vault"
-            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
-          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
       # -------------------------
       # Read AWS credentials from Vault
       # -------------------------
       - name: Read AWS credentials from Vault
         run: |
-          echo "Reading AWS credentials from Vault..."
-
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
-            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/admin/secret/data/secret/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
@@ -359,7 +331,6 @@ jobs:
 
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
             echo "XXX Failed to read AWS credentials from Vault"
-            echo "Response: $(echo $AWS_CREDS | jq '.')"
             exit 1
           fi
 
