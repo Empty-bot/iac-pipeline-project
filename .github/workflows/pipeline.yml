@@ -40,9 +40,8 @@ jobs:
         run: |
           sudo apt install -y jq curl
 
-          echo "🔍 Debug: VAULT_ADDR = $VAULT_ADDR"
-          echo "🔍 Debug: Repository = ${{ github.repository }}"
-          echo "🔍 Debug: Repository owner = ${{ github.repository_owner }}"
+          echo "🔍 VAULT_ADDR = $VAULT_ADDR"
+          echo "🔍 Repository = ${{ github.repository }}"
 
           # Récupérer le JWT token de GitHub
           JWT=$(curl -s \
@@ -50,28 +49,26 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/${{ github.repository_owner }}" \
             | jq -r '.value')
 
-          echo "🔍 Debug: JWT obtained (length: ${#JWT})"
+          echo "JWT token obtained (length: ${#JWT})"
 
-          # S'authentifier à Vault avec le JWT
-          echo "🔍 Attempting to authenticate to Vault..."
+          # S'authentifier à Vault avec le JWT (namespace admin pour HCP Vault)
           VAULT_RESPONSE=$(curl -s \
             --request POST \
+            --header "X-Vault-Namespace: admin" \
             --data "{\"jwt\":\"$JWT\",\"role\":\"github-actions\"}" \
             $VAULT_ADDR/v1/auth/jwt/login)
-
-          echo "🔍 Vault response:"
-          echo "$VAULT_RESPONSE" | jq '.'
 
           VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r '.auth.client_token')
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
-            echo "❌ Failed to authenticate to Vault"
-            echo "Full response: $VAULT_RESPONSE"
+            echo "XXX Failed to authenticate to Vault"
+            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
-          echo "✅ Vault authentication successful"
+          echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
       # -------------------------
       # Read AWS secrets from Vault
@@ -82,6 +79,7 @@ jobs:
 
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
+            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/secret/data/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
@@ -90,6 +88,7 @@ jobs:
 
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
             echo "XXX Failed to read AWS credentials from Vault"
+            echo "Response: $(echo $AWS_CREDS | jq '.')"
             exit 1
           fi
 
@@ -196,19 +195,23 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/${{ github.repository_owner }}" \
             | jq -r '.value')
 
-          VAULT_TOKEN=$(curl -s \
+          VAULT_RESPONSE=$(curl -s \
             --request POST \
+            --header "X-Vault-Namespace: admin" \
             --data "{\"jwt\":\"$JWT\",\"role\":\"github-actions\"}" \
-            $VAULT_ADDR/v1/auth/jwt/login \
-            | jq -r '.auth.client_token')
+            $VAULT_ADDR/v1/auth/jwt/login)
+
+          VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r '.auth.client_token')
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
             echo "XXX Failed to authenticate to Vault"
+            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
       # -------------------------
       # Read APP_SECRET from Vault
@@ -219,6 +222,7 @@ jobs:
 
           APP_SECRET=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
+            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/secret/data/iac/app \
             | jq -r '.data.data.app_secret')
 
@@ -279,7 +283,7 @@ jobs:
           echo "!!! Application deployed successfully!"
           echo "Access it at: http://${{ needs.provision.outputs.instance_ip }}:5000"
           echo ""
-          echo "The APP_SECRET from Vault should be visible on the page"
+          echo " The APP_SECRET from Vault should be visible on the page"
 
   # ==========================================
   # JOB 3 : CLEANUP
@@ -312,19 +316,23 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/${{ github.repository_owner }}" \
             | jq -r '.value')
 
-          VAULT_TOKEN=$(curl -s \
+          VAULT_RESPONSE=$(curl -s \
             --request POST \
+            --header "X-Vault-Namespace: admin" \
             --data "{\"jwt\":\"$JWT\",\"role\":\"github-actions\"}" \
-            $VAULT_ADDR/v1/auth/jwt/login \
-            | jq -r '.auth.client_token')
+            $VAULT_ADDR/v1/auth/jwt/login)
+
+          VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r '.auth.client_token')
 
           if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
             echo "XXX Failed to authenticate to Vault"
+            echo "Response: $(echo $VAULT_RESPONSE | jq '.')"
             exit 1
           fi
 
           echo "VVV Vault authentication successful"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+          echo "VAULT_NAMESPACE=admin" >> $GITHUB_ENV
 
       # -------------------------
       # Read AWS credentials from Vault
@@ -335,6 +343,7 @@ jobs:
 
           AWS_CREDS=$(curl -s \
             -H "X-Vault-Token: $VAULT_TOKEN" \
+            -H "X-Vault-Namespace: $VAULT_NAMESPACE" \
             $VAULT_ADDR/v1/secret/data/iac/aws)
 
           AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | jq -r '.data.data.access_key_id')
@@ -343,6 +352,7 @@ jobs:
 
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
             echo "XXX Failed to read AWS credentials from Vault"
+            echo "Response: $(echo $AWS_CREDS | jq '.')"
             exit 1
           fi
 
