@@ -31,7 +31,10 @@ Ce projet implémente un pipeline Infrastructure as Code (IaC) professionnel qui
 
 Vidéo complète d'exécution du workflow :
 
-![[cicd_workflow2.mp4]]
+
+https://github.com/user-attachments/assets/14faaac6-0c25-4bdc-8162-7b698fb2fd4d
+
+
 
 ## Architecture
 
